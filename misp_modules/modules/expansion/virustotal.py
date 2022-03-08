@@ -21,8 +21,8 @@ class VTClient(object):
     class VTApiError(Exception):
         pass
 
-    def __init__(self, api_key, proxies=None):
-        self.base_url = "https://www.virustotal.com/api/v3"
+    def __init__(self, api_key, base_url, proxies=None):
+        self.base_url = base_url
         self.headers = {
             'x-apikey': api_key,
             'x-tool': 'MISPModuleVirusTotalExpansion',
@@ -85,39 +85,44 @@ class VirusTotalParser(object):
         if not analysis:
             return 0
 
-        count = sum([analysis.get('undetected'), analysis.get('suspicious'),
-                     analysis.get('harmless')])
+        count = sum([analysis.get('undetected'), analysis.get('suspicious'), analysis.get('harmless')])
         file_is_trusted = verdict == 'goodware'
 
         return count if file_is_trusted else count + analysis.get('malicious')
 
-    @staticmethod
-    def create_misp_attribute(_, value, attr_type):
-        attribute = MISPAttribute()
-        attribute.from_dict(**dict(type=attr_type, value=value))
-        return attribute
-
     def query_api(self, attribute):
         self.attribute.from_dict(**attribute)
-        misp_object = self.input_types_mapping[self.attribute.type](self.attribute.value)
-        self.misp_event.add_object(**misp_object)
+        self.input_types_mapping[self.attribute.type](self.attribute.value)
 
     def get_result(self):
         event = json.loads(self.misp_event.to_json())
         results = {key: event[key] for key in ('Attribute', 'Object') if (key in event and event[key])}
         return {'results': results}
 
-    def parse_vt_object(self, query_result):
-        data = query_result['data']['attributes']
+    def add_vt_report(self, response):
+        data = response['data']['attributes']
         analysis = data['last_analysis_results']
 
         vt_object = MISPObject('virustotal-report')
-        vt_object.add_attribute('permalink', type='link', value=query_result['data']['links']['self'])
-        detection_ratio = '{}/{}'.format(analysis['malicious'],
-                                         self.get_total_analysis(analysis, data.get('trusted_verdict')))
+        vt_object.add_attribute('permalink', type='link', value=response['data']['links']['self'])
+        malicious = analysis['malicious']
+        total = self.get_total_analysis(analysis, data.get('trusted_verdict'))
+        detection_ratio = f'{malicious}/{total}'
         vt_object.add_attribute('detection-ratio', type='text', value=detection_ratio, disable_correlation=True)
         self.misp_event.add_object(**vt_object)
         return vt_object.uuid
+
+    def create_file_object(self, response):
+        vt_uuid = self.add_vt_report(response)
+        data = response['data']['attributes']
+        file_object = MISPObject('file')
+
+        for hash_type in ('md5', 'sha1', 'sha256'):
+            file_object.add_attribute(**{'type': hash_type,
+                                         'object_relation': hash_type,
+                                         'value': data[hash_type]})
+        file_object.add_reference(vt_uuid, 'analyzed-with')
+        return file_object
 
     ################################################################################
     ####                         Main parsing functions                         #### # noqa
@@ -128,8 +133,8 @@ class VirusTotalParser(object):
         data = response['data']['attributes']
 
         # DOMAIN
-        domain_ip_object = MISPObject('domain-ip')
-        domain_ip_object.add_attribute('domain', type='domain', value=self.attribute.value)
+        domain_object = MISPObject('domain-ip')
+        domain_object.add_attribute('domain', type='domain', value=self.attribute.value)
 
         # WHOIS
         whois = 'whois'
@@ -140,60 +145,56 @@ class VirusTotalParser(object):
 
         # SIBLINGS
         siblings = self.client.get_domain_relatioship(domain, 'siblings')
-        for sibling in siblings:
-            attr = self.create_misp_attribute(sibling)
+        for sibling in siblings['data']:
+            attr = MISPAttribute()
+            attr.from_dict(**dict(type='domain', value=sibling['id']))
             self.misp_event.add_attribute(**attr)
-            domain_ip_object.add_reference(attr.uuid, 'sibling-of')
+            domain_object.add_reference(attr.uuid, 'sibling-of')
 
         # RESOLUTIONS
         resolutions = self.client.get_domain_relatioship(domain, 'resolutions')
         for resolution in resolutions['data']:
-            domain_ip_object.add_attribute('ip', type='ip-dst', value=resolution['attributes']['ip_address'])
+            domain_object.add_attribute('ip', type='ip-dst', value=resolution['attributes']['ip_address'])
 
         # COMMUNICATING FILES
         communicating_files = self.client.get_domain_relatioship(domain, 'communicating_files')
         for communicating_file in communicating_files['data']:
-            file_object = self.parse_hash_new(communicating_file['sha256'])
-            file_object.add_reference(domain_ip_object.uuid, 'communicates-with')
+            file_object = self.create_file_object(communicating_file)
+            file_object.add_reference(domain_object.uuid, 'communicates-with')
             self.misp_event.add_object(**file_object)
 
         # DOWNLOADED FILES
         downloaded_files = self.client.get_domain_relatioship(domain, 'downloaded_files')
         for downloaded_file in downloaded_files['data']:
-            file_object = self.parse_hash_new(downloaded_file['sha256'])
-            file_object.add_reference(domain_ip_object.uuid, 'downloaded-from')
+            file_object = self.create_file_object(downloaded_file)
+            file_object.add_reference(domain_object.uuid, 'downloaded-from')
             self.misp_event.add_object(**file_object)
 
         # REFERRER FILES
         referrer_files = self.client.get_domain_relatioship(domain, 'referrer_files')
         for referrer_file in referrer_files['data']:
-            file_object = self.parse_hash_new(referrer_file['sha256'])
-            file_object.add_reference(domain_ip_object.uuid, 'referring')
+            file_object = self.create_file_object(referrer_file)
+            file_object.add_reference(domain_object.uuid, 'referring')
             self.misp_event.add_object(**file_object)
 
         # URLS
         urls = self.client.get_domain_relatioship(domain, 'urls')
         for url in urls['data']:
-            vt_uuid = self.parse_vt_object(url['attributes'])
+            vt_uuid = self.add_vt_report(url)
             url_object = MISPObject('url')
             url_object.add_attribute('url', type='url', value=url['attributes']['url'])
             url_object.add_reference(vt_uuid, 'analyzed-with')
-            url_object.add_reference(domain_ip_object.uuid, 'hosted-in')
+            url_object.add_reference(domain_object.uuid, 'hosted-in')
             self.misp_event.add_object(**url_object)
 
-        return domain_ip_object
+        self.misp_event.add_object(**domain_object)
+        return domain_object.uuid
 
     def parse_hash(self, file_hash):
         response = self.client.get_file_report(file_hash)
-        data = response['data']['attributes']
-        vt_uuid = self.parse_vt_object(response)
-        file_object = MISPObject('file')
-
-        for hash_type in ('md5', 'sha1', 'sha256'):
-            file_object.add_attribute(**{'type': hash_type, 'object_relation': hash_type, 'value': data[hash_type]})
-        file_object.add_reference(vt_uuid, 'analyzed-with')
-
-        return file_object
+        file_object = self.create_file_object(response)
+        self.misp_event.add_object(**file_object)
+        return file_object.uuid
 
     def parse_ip(self, ip):
         response = self.client.get_ip_report(ip)
@@ -205,9 +206,9 @@ class VirusTotalParser(object):
 
         # ASN
         asn_object = MISPObject('asn')
-        asn_object.add_attribute('asn', type='AS', value=data.get('asn'))
-        asn_object.add_attribute('subnet-announced', type='ip-src', value=data.get('network'))
-        asn_object.add_attribute('country', type='text', value=data.get('country'))
+        asn_object.add_attribute('asn', type='AS', value=data['asn'])
+        asn_object.add_attribute('subnet-announced', type='ip-src', value=data['network'])
+        asn_object.add_attribute('country', type='text', value=data['country'])
         self.misp_event.add_object(**asn_object)
 
         # RESOLUTIONS
@@ -216,14 +217,22 @@ class VirusTotalParser(object):
             ip_object.add_attribute('domain', type='domain', value=resolution['attributes']['host_name'])
 
         # URLS
-        urls = self.client.get_domain_relatioship(ip, 'urls')
+        urls = self.client.get_ip_relatioship(ip, 'urls')
         for url in urls['data']:
-            vt_uuid = self.parse_vt_object(url['attributes'])
+            vt_uuid = self.add_vt_report(url)
             url_object = MISPObject('url')
             url_object.add_attribute('url', type='url', value=url['attributes']['url'])
             url_object.add_reference(vt_uuid, 'analyzed-with')
             url_object.add_reference(ip_object.uuid, 'hosted-in')
             self.misp_event.add_object(**url_object)
+
+        self.misp_event.add_object(**ip_object)
+        return ip_object.uuid
+
+    def parse_url(self, url):
+        response = self.client.get_url_report(url)
+        self.add_vt_report(response)
+        return None
 
 
 def get_proxy_settings(config: dict) -> dict:
@@ -277,7 +286,7 @@ def handler(q=False):
         return False
     request = json.loads(q)
     if not request.get('config') or not request['config'].get('apikey'):
-        misperrors['error'] = "A VirusTotal api key is required for this module."
+        misperrors['error'] = 'A VirusTotal api key is required for this module.'
         return misperrors
     if not request.get('attribute') or not check_input_attribute(request['attribute']):
         return {'error': f'{standard_error_message}, which should contain at least a type, a value and an uuid.'}
@@ -288,11 +297,13 @@ def handler(q=False):
     attribute = request['attribute']
 
     try:
-        client = VTClient(request['config']['apikey'], proxies=get_proxy_settings(request.get('config')))
+        client = VTClient(request['config']['apikey'],
+                          'https://www.virustotal.com/api/v3',
+                          proxies=get_proxy_settings(request.get('config')))
         parser = VirusTotalParser(client, event_limit)
         parser.query_api(attribute)
     except VTClient.VTApiError as ex:
-        misperrors['error'] = ex
+        misperrors['error'] = str(ex)
         return misperrors
 
     return parser.get_result()
