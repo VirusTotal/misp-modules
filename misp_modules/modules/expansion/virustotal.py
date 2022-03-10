@@ -42,7 +42,7 @@ class VTClient(object):
         data = response.json()
         if response.status_code is not 200:
             raise VTClient.VTApiError(data['error']['message'])
-        return data
+        return data['data']
 
     def get_file_report(self, resource: str) -> dict:
         return self._object('/files', resource)
@@ -132,7 +132,7 @@ class VirusTotalParser(object):
 
     def parse_domain(self, domain: str) -> str:
         response = self.client.get_domain_report(domain)
-        data = response['data']['attributes']
+        data = response['attributes']
 
         # DOMAIN
         domain_object = MISPObject('domain-ip')
@@ -147,7 +147,7 @@ class VirusTotalParser(object):
 
         # SIBLINGS
         siblings = self.client.get_domain_relationship(domain, 'siblings')
-        for sibling in siblings['data']:
+        for sibling in siblings:
             attr = MISPAttribute()
             attr.from_dict(**dict(type='domain', value=sibling['id']))
             self.misp_event.add_attribute(**attr)
@@ -155,33 +155,33 @@ class VirusTotalParser(object):
 
         # RESOLUTIONS
         resolutions = self.client.get_domain_relationship(domain, 'resolutions')
-        for resolution in resolutions['data']:
+        for resolution in resolutions:
             domain_object.add_attribute('ip', type='ip-dst', value=resolution['attributes']['ip_address'])
 
         # COMMUNICATING FILES
         communicating_files = self.client.get_domain_relationship(domain, 'communicating_files')
-        for communicating_file in communicating_files['data']:
+        for communicating_file in communicating_files:
             file_object = self.create_file_object(communicating_file)
             file_object.add_reference(domain_object.uuid, 'communicates-with')
             self.misp_event.add_object(**file_object)
 
         # DOWNLOADED FILES
         downloaded_files = self.client.get_domain_relationship(domain, 'downloaded_files')
-        for downloaded_file in downloaded_files['data']:
+        for downloaded_file in downloaded_files:
             file_object = self.create_file_object(downloaded_file)
             file_object.add_reference(domain_object.uuid, 'downloaded-from')
             self.misp_event.add_object(**file_object)
 
         # REFERRER FILES
         referrer_files = self.client.get_domain_relationship(domain, 'referrer_files')
-        for referrer_file in referrer_files['data']:
+        for referrer_file in referrer_files:
             file_object = self.create_file_object(referrer_file)
             file_object.add_reference(domain_object.uuid, 'referring')
             self.misp_event.add_object(**file_object)
 
         # URLS
         urls = self.client.get_domain_relationship(domain, 'urls')
-        for url in urls['data']:
+        for url in urls:
             vt_uuid = self.add_vt_report(url)
             url_object = MISPObject('url')
             url_object.add_attribute('url', type='url', value=url['attributes']['url'])
@@ -200,7 +200,7 @@ class VirusTotalParser(object):
 
     def parse_ip(self, ip: str) -> str:
         response = self.client.get_ip_report(ip)
-        data = response['data']['attributes']
+        data = response['attributes']
 
         # DOMAIN
         ip_object = MISPObject('domain-ip')
@@ -215,12 +215,12 @@ class VirusTotalParser(object):
 
         # RESOLUTIONS
         resolutions = self.client.get_ip_relationship(ip, 'resolutions')
-        for resolution in resolutions['data']:
+        for resolution in resolutions:
             ip_object.add_attribute('domain', type='domain', value=resolution['attributes']['host_name'])
 
         # URLS
         urls = self.client.get_ip_relationship(ip, 'urls')
-        for url in urls['data']:
+        for url in urls:
             vt_uuid = self.add_vt_report(url)
             url_object = MISPObject('url')
             url_object.add_attribute('url', type='url', value=url['attributes']['url'])
