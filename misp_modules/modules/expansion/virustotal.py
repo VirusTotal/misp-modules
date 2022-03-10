@@ -21,7 +21,7 @@ class VTClient(object):
     class VTApiError(Exception):
         pass
 
-    def __init__(self, api_key, base_url, proxies=None):
+    def __init__(self, api_key: str, base_url: str, proxies: dict = None) -> None:
         self.base_url = base_url
         self.headers = {
             'x-apikey': api_key,
@@ -30,7 +30,7 @@ class VTClient(object):
         self.proxies = proxies
 
     @staticmethod
-    def _object(cls, endpoint, tail):
+    def _object(cls, endpoint: str, tail: str) -> dict:
         response = requests.get(cls.base_url + endpoint + '/' + tail, headers=cls.headers, proxies=cls.proxies)
         data = response.json()
         if response.status_code is not 200:
@@ -38,37 +38,41 @@ class VTClient(object):
         return data
 
     @staticmethod
-    def _list(cls, endpoint, tail, limit=5):
-        return requests.get(cls.base_url + endpoint + '/' + tail,
-                            headers=cls.headers, proxies=cls.proxies, params={'limit': limit})
+    def _list(cls, endpoint: str, tail: str, limit: int = 5) -> dict:
+        response = requests.get(cls.base_url + endpoint + '/' + tail,
+                                headers=cls.headers, proxies=cls.proxies, params={'limit': limit})
+        data = response.json()
+        if response.status_code is not 200:
+            raise cls.VTApiError(data['error']['message'])
+        return data
 
-    def get_file_report(self, resource):
+    def get_file_report(self, resource: str) -> dict:
         return self._object('/files', resource)
 
-    def get_url_report(self, resource):
+    def get_url_report(self, resource: str) -> dict:
         return self._object('/urls', resource)
 
-    def get_domain_report(self, resource):
+    def get_domain_report(self, resource: str) -> dict:
         return self._object('/domains', resource)
 
-    def get_ip_report(self, resource):
+    def get_ip_report(self, resource: str) -> dict:
         return self._object('/ip_addresses', resource)
 
-    def get_file_relationship(self, resource, relationship, limit=None):
+    def get_file_relationship(self, resource: str, relationship: str, limit: int = None):
         return self._list('/files', resource + '/' + relationship, limit=limit)
 
-    def get_url_relationship(self, resource, relationship, limit=None):
+    def get_url_relationship(self, resource: str, relationship: str, limit: int = None):
         return self._list('/urls', resource + '/' + relationship, limit=limit)
 
-    def get_domain_relationship(self, resource, relationship, limit=None):
+    def get_domain_relationship(self, resource: str, relationship: str, limit: int = None):
         return self._list('/domains', resource + '/' + relationship, limit=limit)
 
-    def get_ip_relationship(self, resource, relationship, limit=None):
+    def get_ip_relationship(self, resource: str, relationship: str, limit: int = None):
         return self._list('/ip_addresses', resource + '/' + relationship, limit=limit)
 
 
 class VirusTotalParser(object):
-    def __init__(self, client, limit):
+    def __init__(self, client: VTClient, limit: int) -> None:
         self.client = client
         self.limit = limit
         self.misp_event = MISPEvent()
@@ -81,7 +85,7 @@ class VirusTotalParser(object):
         self.proxies = None
 
     @staticmethod
-    def get_total_analysis(_, analysis, verdict):
+    def get_total_analysis(_, analysis: dict, verdict: str) -> int:
         if not analysis:
             return 0
 
@@ -90,16 +94,16 @@ class VirusTotalParser(object):
 
         return count if file_is_trusted else count + analysis.get('malicious')
 
-    def query_api(self, attribute):
+    def query_api(self, attribute: dict) -> None:
         self.attribute.from_dict(**attribute)
         self.input_types_mapping[self.attribute.type](self.attribute.value)
 
-    def get_result(self):
+    def get_result(self) -> dict:
         event = json.loads(self.misp_event.to_json())
         results = {key: event[key] for key in ('Attribute', 'Object') if (key in event and event[key])}
         return {'results': results}
 
-    def add_vt_report(self, response):
+    def add_vt_report(self, response) -> str:
         data = response['data']['attributes']
         analysis = data['last_analysis_results']
 
@@ -112,7 +116,7 @@ class VirusTotalParser(object):
         self.misp_event.add_object(**vt_object)
         return vt_object.uuid
 
-    def create_file_object(self, response):
+    def create_file_object(self, response: dict) -> MISPObject:
         vt_uuid = self.add_vt_report(response)
         data = response['data']['attributes']
         file_object = MISPObject('file')
@@ -128,7 +132,7 @@ class VirusTotalParser(object):
     ####                         Main parsing functions                         #### # noqa
     ################################################################################
 
-    def parse_domain(self, domain):
+    def parse_domain(self, domain: str) -> str:
         response = self.client.get_domain_report(domain)
         data = response['data']['attributes']
 
@@ -144,7 +148,7 @@ class VirusTotalParser(object):
             self.misp_event.add_object(**whois_object)
 
         # SIBLINGS
-        siblings = self.client.get_domain_relatioship(domain, 'siblings')
+        siblings = self.client.get_domain_relationship(domain, 'siblings')
         for sibling in siblings['data']:
             attr = MISPAttribute()
             attr.from_dict(**dict(type='domain', value=sibling['id']))
@@ -152,33 +156,33 @@ class VirusTotalParser(object):
             domain_object.add_reference(attr.uuid, 'sibling-of')
 
         # RESOLUTIONS
-        resolutions = self.client.get_domain_relatioship(domain, 'resolutions')
+        resolutions = self.client.get_domain_relationship(domain, 'resolutions')
         for resolution in resolutions['data']:
             domain_object.add_attribute('ip', type='ip-dst', value=resolution['attributes']['ip_address'])
 
         # COMMUNICATING FILES
-        communicating_files = self.client.get_domain_relatioship(domain, 'communicating_files')
+        communicating_files = self.client.get_domain_relationship(domain, 'communicating_files')
         for communicating_file in communicating_files['data']:
             file_object = self.create_file_object(communicating_file)
             file_object.add_reference(domain_object.uuid, 'communicates-with')
             self.misp_event.add_object(**file_object)
 
         # DOWNLOADED FILES
-        downloaded_files = self.client.get_domain_relatioship(domain, 'downloaded_files')
+        downloaded_files = self.client.get_domain_relationship(domain, 'downloaded_files')
         for downloaded_file in downloaded_files['data']:
             file_object = self.create_file_object(downloaded_file)
             file_object.add_reference(domain_object.uuid, 'downloaded-from')
             self.misp_event.add_object(**file_object)
 
         # REFERRER FILES
-        referrer_files = self.client.get_domain_relatioship(domain, 'referrer_files')
+        referrer_files = self.client.get_domain_relationship(domain, 'referrer_files')
         for referrer_file in referrer_files['data']:
             file_object = self.create_file_object(referrer_file)
             file_object.add_reference(domain_object.uuid, 'referring')
             self.misp_event.add_object(**file_object)
 
         # URLS
-        urls = self.client.get_domain_relatioship(domain, 'urls')
+        urls = self.client.get_domain_relationship(domain, 'urls')
         for url in urls['data']:
             vt_uuid = self.add_vt_report(url)
             url_object = MISPObject('url')
@@ -190,13 +194,13 @@ class VirusTotalParser(object):
         self.misp_event.add_object(**domain_object)
         return domain_object.uuid
 
-    def parse_hash(self, file_hash):
+    def parse_hash(self, file_hash: str) -> str:
         response = self.client.get_file_report(file_hash)
         file_object = self.create_file_object(response)
         self.misp_event.add_object(**file_object)
         return file_object.uuid
 
-    def parse_ip(self, ip):
+    def parse_ip(self, ip: str) -> str:
         response = self.client.get_ip_report(ip)
         data = response['data']['attributes']
 
@@ -212,12 +216,12 @@ class VirusTotalParser(object):
         self.misp_event.add_object(**asn_object)
 
         # RESOLUTIONS
-        resolutions = self.client.get_ip_relatioship(ip, 'resolutions')
+        resolutions = self.client.get_ip_relationship(ip, 'resolutions')
         for resolution in resolutions['data']:
             ip_object.add_attribute('domain', type='domain', value=resolution['attributes']['host_name'])
 
         # URLS
-        urls = self.client.get_ip_relatioship(ip, 'urls')
+        urls = self.client.get_ip_relationship(ip, 'urls')
         for url in urls['data']:
             vt_uuid = self.add_vt_report(url)
             url_object = MISPObject('url')
@@ -229,7 +233,7 @@ class VirusTotalParser(object):
         self.misp_event.add_object(**ip_object)
         return ip_object.uuid
 
-    def parse_url(self, url):
+    def parse_url(self, url: str) -> None:
         response = self.client.get_url_report(url)
         self.add_vt_report(response)
         return None
@@ -272,7 +276,7 @@ def get_proxy_settings(config: dict) -> dict:
     return proxies
 
 
-def parse_error(status_code):
+def parse_error(status_code: int) -> str:
     status_mapping = {204: 'VirusTotal request rate limit exceeded.',
                       400: 'Incorrect request, please check the arguments.',
                       403: 'You don\'t have enough privileges to make the request.'}
