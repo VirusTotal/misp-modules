@@ -10,7 +10,7 @@ mispattributes = {'input': ['hostname', 'domain', "ip-src", "ip-dst", "md5", "sh
 
 # possible module-types: 'expansion', 'hover' or both
 moduleinfo = {'version': '4', 'author': 'Hannah Ward',
-              'description': 'Get information from VirusTotal',
+              'description': 'Enrich observables with VirusTotal API v3',
               'module-type': ['expansion']}
 
 # config fields that your code expects from the site admin
@@ -29,21 +29,19 @@ class VTClient(object):
         }
         self.proxies = proxies
 
-    @staticmethod
-    def _object(cls, endpoint: str, tail: str) -> dict:
-        response = requests.get(cls.base_url + endpoint + '/' + tail, headers=cls.headers, proxies=cls.proxies)
+    def _object(self, endpoint: str, tail: str) -> dict:
+        response = requests.get(self.base_url + endpoint + '/' + tail, headers=self.headers, proxies=self.proxies)
         data = response.json()
         if response.status_code is not 200:
-            raise cls.VTApiError(data['error']['message'])
+            raise VTClient.VTApiError(data['error']['message'])
         return data
 
-    @staticmethod
-    def _list(cls, endpoint: str, tail: str, limit: int = 5) -> dict:
-        response = requests.get(cls.base_url + endpoint + '/' + tail,
-                                headers=cls.headers, proxies=cls.proxies, params={'limit': limit})
+    def _list(self, endpoint: str, tail: str, limit: int = 5) -> dict:
+        response = requests.get(self.base_url + endpoint + '/' + tail,
+                                headers=self.headers, proxies=self.proxies, params={'limit': limit})
         data = response.json()
         if response.status_code is not 200:
-            raise cls.VTApiError(data['error']['message'])
+            raise VTClient.VTApiError(data['error']['message'])
         return data
 
     def get_file_report(self, resource: str) -> dict:
