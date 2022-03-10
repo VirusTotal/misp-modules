@@ -34,7 +34,7 @@ class VTClient(object):
         data = response.json()
         if response.status_code is not 200:
             raise VTClient.VTApiError(data['error']['message'])
-        return data
+        return data['data']
 
     def _list(self, endpoint: str, tail: str, limit: int = 5) -> dict:
         response = requests.get(self.base_url + endpoint + '/' + tail,
@@ -102,11 +102,11 @@ class VirusTotalParser(object):
         return {'results': results}
 
     def add_vt_report(self, response) -> str:
-        data = response['data']['attributes']
+        data = response['attributes']
         analysis = data['last_analysis_results']
 
         vt_object = MISPObject('virustotal-report')
-        vt_object.add_attribute('permalink', type='link', value=response['data']['links']['self'])
+        vt_object.add_attribute('permalink', type='link', value=response['links']['self'])
         malicious = analysis['malicious']
         total = self.get_total_analysis(analysis, data.get('trusted_verdict'))
         detection_ratio = f'{malicious}/{total}'
@@ -116,7 +116,7 @@ class VirusTotalParser(object):
 
     def create_file_object(self, response: dict) -> MISPObject:
         vt_uuid = self.add_vt_report(response)
-        data = response['data']['attributes']
+        data = response['attributes']
         file_object = MISPObject('file')
 
         for hash_type in ('md5', 'sha1', 'sha256'):
