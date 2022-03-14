@@ -36,7 +36,7 @@ class VTClient(object):
             raise VTClient.VTApiError(data['error']['message'])
         return data['data']
 
-    def _list(self, endpoint: str, tail: str, limit: int = 5) -> dict:
+    def _list(self, endpoint: str, tail: str, limit: int = None) -> dict:
         response = requests.get(self.base_url + endpoint + '/' + tail,
                                 headers=self.headers, proxies=self.proxies, params={'limit': limit})
         data = response.json()
@@ -56,16 +56,16 @@ class VTClient(object):
     def get_ip_report(self, resource: str) -> dict:
         return self._object('/ip_addresses', resource)
 
-    def get_file_relationship(self, resource: str, relationship: str, limit: int = None):
+    def get_file_relationship(self, resource: str, relationship: str, limit: int = 5):
         return self._list('/files', resource + '/' + relationship, limit=limit)
 
-    def get_url_relationship(self, resource: str, relationship: str, limit: int = None):
+    def get_url_relationship(self, resource: str, relationship: str, limit: int = 5):
         return self._list('/urls', resource + '/' + relationship, limit=limit)
 
-    def get_domain_relationship(self, resource: str, relationship: str, limit: int = None):
+    def get_domain_relationship(self, resource: str, relationship: str, limit: int = 5):
         return self._list('/domains', resource + '/' + relationship, limit=limit)
 
-    def get_ip_relationship(self, resource: str, relationship: str, limit: int = None):
+    def get_ip_relationship(self, resource: str, relationship: str, limit: int = 5):
         return self._list('/ip_addresses', resource + '/' + relationship, limit=limit)
 
 
@@ -114,17 +114,36 @@ class VirusTotalParser(object):
         self.misp_event.add_object(**vt_object)
         return vt_object.uuid
 
-    def create_file_object(self, response: dict) -> MISPObject:
-        vt_uuid = self.add_vt_report(response)
-        data = response['attributes']
+    def create_file_object(self, data: dict) -> MISPObject:
+        vt_uuid = self.add_vt_report(data)
         file_object = MISPObject('file')
-
         for hash_type in ('md5', 'sha1', 'sha256'):
             file_object.add_attribute(**{'type': hash_type,
                                          'object_relation': hash_type,
-                                         'value': data[hash_type]})
+                                         'value': data['attributes'][hash_type]})
         file_object.add_reference(vt_uuid, 'analyzed-with')
         return file_object
+
+    def create_domain_object(self, data: dict) -> MISPObject:
+        vt_uuid = self.add_vt_report(data)
+        domain_object = MISPObject('domain-ip')
+        domain_object.add_attribute('domain', type='domain', value=data['attributes']['id'])
+        domain_object.add_reference(vt_uuid, 'analyzed-with')
+        return domain_object
+
+    def create_ip_object(self, data: dict) -> MISPObject:
+        vt_uuid = self.add_vt_report(data)
+        ip_object = MISPObject('domain-ip')
+        ip_object.add_attribute('ip', type='ip-dst', value=data['attributes']['id'])
+        ip_object.add_reference(vt_uuid, 'analyzed-with')
+        return ip_object
+
+    def create_url_object(self, data: dict) -> MISPObject:
+        vt_uuid = self.add_vt_report(data)
+        url_object = MISPObject('url')
+        url_object.add_attribute('url', type='url', value=data['attributes']['url'])
+        url_object.add_reference(vt_uuid, 'analyzed-with')
+        return url_object
 
     ################################################################################
     ####                         Main parsing functions                         #### # noqa
@@ -135,8 +154,7 @@ class VirusTotalParser(object):
         data = response['attributes']
 
         # DOMAIN
-        domain_object = MISPObject('domain-ip')
-        domain_object.add_attribute('domain', type='domain', value=self.attribute.value)
+        domain_object = self.create_domain_object(response)
 
         # WHOIS
         whois = 'whois'
@@ -182,10 +200,7 @@ class VirusTotalParser(object):
         # URLS
         urls = self.client.get_domain_relationship(domain, 'urls')
         for url in urls:
-            vt_uuid = self.add_vt_report(url)
-            url_object = MISPObject('url')
-            url_object.add_attribute('url', type='url', value=url['attributes']['url'])
-            url_object.add_reference(vt_uuid, 'analyzed-with')
+            url_object = self.create_url_object(url)
             url_object.add_reference(domain_object.uuid, 'hosted-in')
             self.misp_event.add_object(**url_object)
 
@@ -203,8 +218,7 @@ class VirusTotalParser(object):
         data = response['attributes']
 
         # DOMAIN
-        ip_object = MISPObject('domain-ip')
-        ip_object.add_attribute('ip', type='ip-dst', value=self.attribute.value)
+        ip_object = self.create_ip_object(response)
 
         # ASN
         asn_object = MISPObject('asn')
@@ -221,20 +235,18 @@ class VirusTotalParser(object):
         # URLS
         urls = self.client.get_ip_relationship(ip, 'urls')
         for url in urls:
-            vt_uuid = self.add_vt_report(url)
-            url_object = MISPObject('url')
-            url_object.add_attribute('url', type='url', value=url['attributes']['url'])
-            url_object.add_reference(vt_uuid, 'analyzed-with')
+            url_object = self.create_url_object(url)
             url_object.add_reference(ip_object.uuid, 'hosted-in')
             self.misp_event.add_object(**url_object)
 
         self.misp_event.add_object(**ip_object)
         return ip_object.uuid
 
-    def parse_url(self, url: str) -> None:
+    def parse_url(self, url: str) -> str:
         response = self.client.get_url_report(url)
-        self.add_vt_report(response)
-        return None
+        url_object = self.create_url_object(response)
+        self.misp_event.add_object(**url_object)
+        return url_object.uuid
 
 
 def get_proxy_settings(config: dict) -> dict:
