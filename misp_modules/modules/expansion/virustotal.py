@@ -103,7 +103,7 @@ class VirusTotalParser(object):
 
     def add_vt_report(self, response) -> str:
         data = response['attributes']
-        analysis = data['last_analysis_results']
+        analysis = data['last_analysis_stats']
 
         vt_object = MISPObject('virustotal-report')
         vt_object.add_attribute('permalink', type='link', value=response['links']['self'])
