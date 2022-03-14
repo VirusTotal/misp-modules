@@ -83,7 +83,7 @@ class VirusTotalParser(object):
         self.proxies = None
 
     @staticmethod
-    def get_total_analysis(_, analysis: dict, verdict: str) -> int:
+    def get_total_analysis(_, analysis: dict, verdict: str = None) -> int:
         if not analysis:
             return 0
 
