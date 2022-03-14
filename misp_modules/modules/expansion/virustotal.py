@@ -32,7 +32,7 @@ class VTClient(object):
     def _object(self, endpoint: str, tail: str) -> dict:
         response = requests.get(self.base_url + endpoint + '/' + tail, headers=self.headers, proxies=self.proxies)
         data = response.json()
-        if response.status_code is not 200:
+        if response.status_code != 200:
             raise VTClient.VTApiError(data['error']['message'])
         return data['data']
 
@@ -40,7 +40,7 @@ class VTClient(object):
         response = requests.get(self.base_url + endpoint + '/' + tail,
                                 headers=self.headers, proxies=self.proxies, params={'limit': limit})
         data = response.json()
-        if response.status_code is not 200:
+        if response.status_code != 200:
             raise VTClient.VTApiError(data['error']['message'])
         return data['data']
 
