@@ -83,7 +83,7 @@ class VirusTotalParser(object):
         self.proxies = None
 
     @staticmethod
-    def get_total_analysis(_, analysis: dict, trusted_verdict: dict = None) -> int:
+    def get_total_analysis(analysis: dict, trusted_verdict: dict = None) -> int:
         if not analysis:
             return 0
 
@@ -104,11 +104,12 @@ class VirusTotalParser(object):
     def add_vt_report(self, response) -> str:
         data = response['attributes']
         analysis = data['last_analysis_stats']
-
-        vt_object = MISPObject('virustotal-report')
-        vt_object.add_attribute('permalink', type='link', value=response['links']['self'])
         malicious = analysis['malicious']
         total = self.get_total_analysis(analysis, data.get('trusted_verdict'))
+        permalink = f'https://www.virustotal.com/gui/{response["type"]}/{response["id"]}'
+
+        vt_object = MISPObject('virustotal-report')
+        vt_object.add_attribute('permalink', type='link', value=permalink)
         detection_ratio = f'{malicious}/{total}'
         vt_object.add_attribute('detection-ratio', type='text', value=detection_ratio, disable_correlation=True)
         self.misp_event.add_object(**vt_object)
