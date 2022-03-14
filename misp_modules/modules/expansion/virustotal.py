@@ -87,10 +87,10 @@ class VirusTotalParser(object):
         if not analysis:
             return 0
 
-        count = sum([analysis.get('undetected'), analysis.get('suspicious'), analysis.get('harmless')])
+        count = sum([analysis['undetected'], analysis['suspicious'], analysis['harmless']])
         file_is_trusted = verdict == 'goodware'
 
-        return count if file_is_trusted else count + analysis.get('malicious')
+        return count if file_is_trusted else count + analysis['malicious']
 
     def query_api(self, attribute: dict) -> None:
         self.attribute.from_dict(**attribute)
@@ -127,14 +127,14 @@ class VirusTotalParser(object):
     def create_domain_object(self, data: dict) -> MISPObject:
         vt_uuid = self.add_vt_report(data)
         domain_object = MISPObject('domain-ip')
-        domain_object.add_attribute('domain', type='domain', value=data['attributes']['id'])
+        domain_object.add_attribute('domain', type='domain', value=data['id'])
         domain_object.add_reference(vt_uuid, 'analyzed-with')
         return domain_object
 
     def create_ip_object(self, data: dict) -> MISPObject:
         vt_uuid = self.add_vt_report(data)
         ip_object = MISPObject('domain-ip')
-        ip_object.add_attribute('ip', type='ip-dst', value=data['attributes']['id'])
+        ip_object.add_attribute('ip', type='ip-dst', value=data['id'])
         ip_object.add_reference(vt_uuid, 'analyzed-with')
         return ip_object
 
@@ -157,10 +157,9 @@ class VirusTotalParser(object):
         domain_object = self.create_domain_object(response)
 
         # WHOIS
-        whois = 'whois'
-        if data.get(whois):
-            whois_object = MISPObject(whois)
-            whois_object.add_attribute('text', type='text', value=data[whois])
+        if data.get('whois'):
+            whois_object = MISPObject('whois')
+            whois_object.add_attribute('text', type='text', value=data['whois'])
             self.misp_event.add_object(**whois_object)
 
         # SIBLINGS
