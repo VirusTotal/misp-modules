@@ -83,12 +83,12 @@ class VirusTotalParser(object):
         self.proxies = None
 
     @staticmethod
-    def get_total_analysis(_, analysis: dict, verdict: str = None) -> int:
+    def get_total_analysis(_, analysis: dict, trusted_verdict: dict = None) -> int:
         if not analysis:
             return 0
 
         count = sum([analysis['undetected'], analysis['suspicious'], analysis['harmless']])
-        file_is_trusted = verdict == 'goodware'
+        file_is_trusted = (trusted_verdict or {}).get('verdict') == 'goodware'
 
         return count if file_is_trusted else count + analysis['malicious']
 
