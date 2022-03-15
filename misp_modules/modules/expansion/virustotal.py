@@ -243,13 +243,14 @@ def handler(q=False):
 
     event_limit = request['config'].get('event_limit')
     attribute = request['attribute']
+    proxy_settings = get_proxy_settings(request.get('config'))
 
     try:
         client = vt.Client(request['config']['apikey'],
                            headers={
                                 'x-tool': 'MISPModuleVirusTotalExpansion',
                            },
-                           proxy=get_proxy_settings(request.get('config'))['http'])
+                           proxy=proxy_settings['http'] if proxy_settings else None)
         parser = VirusTotalParser(client, event_limit)
         parser.query_api(attribute)
     except vt.APIError as ex:
