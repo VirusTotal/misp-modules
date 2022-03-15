@@ -30,7 +30,7 @@ class VTClient(object):
         self.proxies = proxies
 
     def _object(self, endpoint: str, tail: str) -> dict:
-        response = requests.get(self.base_url + endpoint + '/' + tail, headers=self.headers, proxies=self.proxies)
+        response = requests.get(f'{self.base_url}{endpoint}/{tail}', headers=self.headers, proxies=self.proxies)
         data = response.json()
         if response.status_code != 200:
             raise VTClient.VTApiError(data['error']['message'])
@@ -176,25 +176,15 @@ class VirusTotalParser(object):
         for resolution in resolutions:
             domain_object.add_attribute('ip', type='ip-dst', value=resolution['attributes']['ip_address'])
 
-        # COMMUNICATING FILES
-        communicating_files = self.client.get_domain_relationship(domain, 'communicating_files')
-        for communicating_file in communicating_files:
-            file_object = self.create_file_object(communicating_file)
-            file_object.add_reference(domain_object.uuid, 'communicates-with')
-            self.misp_event.add_object(**file_object)
-
-        # DOWNLOADED FILES
-        downloaded_files = self.client.get_domain_relationship(domain, 'downloaded_files')
-        for downloaded_file in downloaded_files:
-            file_object = self.create_file_object(downloaded_file)
-            file_object.add_reference(domain_object.uuid, 'downloaded-from')
-            self.misp_event.add_object(**file_object)
-
-        # REFERRER FILES
-        referrer_files = self.client.get_domain_relationship(domain, 'referrer_files')
-        for referrer_file in referrer_files:
-            file_object = self.create_file_object(referrer_file)
-            file_object.add_reference(domain_object.uuid, 'referring')
+for relationship_name, misp_name in [
+    ('communicating_files', 'communicates-with'),
+    ('downloaded_files', 'downloaded-from'),
+    ('referrer_files', 'referring')
+]:
+    files = self.client.get_domain_relationship(domain, relationship_name)
+    for f in files:
+            file_object = self.create_file_object(f)
+            file_object.add_reference(domain_object.uuid, misp_name)
             self.misp_event.add_object(**file_object)
 
         # URLS
@@ -217,7 +207,7 @@ class VirusTotalParser(object):
         response = self.client.get_ip_report(ip)
         data = response['attributes']
 
-        # DOMAIN
+        # IP
         ip_object = self.create_ip_object(response)
 
         # ASN
