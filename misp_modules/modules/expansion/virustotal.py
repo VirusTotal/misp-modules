@@ -17,10 +17,11 @@ moduleinfo = {'version': '4', 'author': 'Hannah Ward',
 moduleconfig = ["apikey", "event_limit", 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password']
 
 
-class VTClient(object):
-    class VTApiError(Exception):
-        pass
+class VTApiError(Exception):
+    """Error handler in case of API error."""
 
+
+class VTClient(object):
     def __init__(self, api_key: str, base_url: str, proxies: dict = None) -> None:
         self.base_url = base_url
         self.headers = {
@@ -33,7 +34,7 @@ class VTClient(object):
         response = requests.get(f'{self.base_url}{endpoint}/{tail}', headers=self.headers, proxies=self.proxies)
         data = response.json()
         if response.status_code != 200:
-            raise VTClient.VTApiError(data['error']['message'])
+            raise VTApiError(data['error']['message'])
         return data['data']
 
     def _list(self, endpoint: str, tail: str, limit: int = None) -> dict:
@@ -41,7 +42,7 @@ class VTClient(object):
                                 headers=self.headers, proxies=self.proxies, params={'limit': limit})
         data = response.json()
         if response.status_code != 200:
-            raise VTClient.VTApiError(data['error']['message'])
+            raise VTApiError(data['error']['message'])
         return data['data']
 
     def get_file_report(self, resource: str) -> dict:
@@ -176,16 +177,17 @@ class VirusTotalParser(object):
         for resolution in resolutions:
             domain_object.add_attribute('ip', type='ip-dst', value=resolution['attributes']['ip_address'])
 
-for relationship_name, misp_name in [
-    ('communicating_files', 'communicates-with'),
-    ('downloaded_files', 'downloaded-from'),
-    ('referrer_files', 'referring')
-]:
-    files = self.client.get_domain_relationship(domain, relationship_name)
-    for f in files:
-            file_object = self.create_file_object(f)
-            file_object.add_reference(domain_object.uuid, misp_name)
-            self.misp_event.add_object(**file_object)
+        # COMMUNICATING, DOWNLOADED AND REFERRER FILES
+        for relationship_name, misp_name in [
+            ('communicating_files', 'communicates-with'),
+            ('downloaded_files', 'downloaded-from'),
+            ('referrer_files', 'referring')
+        ]:
+            files = self.client.get_domain_relationship(domain, relationship_name)
+            for f in files:
+                file_object = self.create_file_object(f)
+                file_object.add_reference(domain_object.uuid, misp_name)
+                self.misp_event.add_object(**file_object)
 
         # URLS
         urls = self.client.get_domain_relationship(domain, 'urls')
@@ -306,7 +308,7 @@ def handler(q=False):
                           proxies=get_proxy_settings(request.get('config')))
         parser = VirusTotalParser(client, event_limit)
         parser.query_api(attribute)
-    except VTClient.VTApiError as ex:
+    except VTApiError as ex:
         misperrors['error'] = str(ex)
         return misperrors
 
