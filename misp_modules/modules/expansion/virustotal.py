@@ -1,6 +1,6 @@
 import json
-import requests
 from urllib.parse import urlparse
+import vt
 from . import check_input_attribute, standard_error_message
 from pymisp import MISPAttribute, MISPEvent, MISPObject
 
@@ -10,70 +10,17 @@ mispattributes = {'input': ['hostname', 'domain', "ip-src", "ip-dst", "md5", "sh
 
 # possible module-types: 'expansion', 'hover' or both
 moduleinfo = {'version': '4', 'author': 'Hannah Ward',
-              'description': 'Enrich observables with VirusTotal API v3',
+              'description': 'Enrich observables with the VirusTotal v3 API',
               'module-type': ['expansion']}
 
 # config fields that your code expects from the site admin
 moduleconfig = ["apikey", "event_limit", 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password']
 
 
-class VTApiError(Exception):
-    """Error handler in case of API error."""
-
-
-class VTClient(object):
-    def __init__(self, api_key: str, base_url: str, proxies: dict = None) -> None:
-        self.base_url = base_url
-        self.headers = {
-            'x-apikey': api_key,
-            'x-tool': 'MISPModuleVirusTotalExpansion',
-        }
-        self.proxies = proxies
-
-    def _object(self, endpoint: str, tail: str) -> dict:
-        response = requests.get(f'{self.base_url}{endpoint}/{tail}', headers=self.headers, proxies=self.proxies)
-        data = response.json()
-        if response.status_code != 200:
-            raise VTApiError(data['error']['message'])
-        return data['data']
-
-    def _list(self, endpoint: str, tail: str, limit: int = None) -> dict:
-        response = requests.get(self.base_url + endpoint + '/' + tail,
-                                headers=self.headers, proxies=self.proxies, params={'limit': limit})
-        data = response.json()
-        if response.status_code != 200:
-            raise VTApiError(data['error']['message'])
-        return data['data']
-
-    def get_file_report(self, resource: str) -> dict:
-        return self._object('/files', resource)
-
-    def get_url_report(self, resource: str) -> dict:
-        return self._object('/urls', resource)
-
-    def get_domain_report(self, resource: str) -> dict:
-        return self._object('/domains', resource)
-
-    def get_ip_report(self, resource: str) -> dict:
-        return self._object('/ip_addresses', resource)
-
-    def get_file_relationship(self, resource: str, relationship: str, limit: int = 5):
-        return self._list('/files', resource + '/' + relationship, limit=limit)
-
-    def get_url_relationship(self, resource: str, relationship: str, limit: int = 5):
-        return self._list('/urls', resource + '/' + relationship, limit=limit)
-
-    def get_domain_relationship(self, resource: str, relationship: str, limit: int = 5):
-        return self._list('/domains', resource + '/' + relationship, limit=limit)
-
-    def get_ip_relationship(self, resource: str, relationship: str, limit: int = 5):
-        return self._list('/ip_addresses', resource + '/' + relationship, limit=limit)
-
-
 class VirusTotalParser(object):
-    def __init__(self, client: VTClient, limit: int) -> None:
+    def __init__(self, client: vt.Client, limit: int) -> None:
         self.client = client
-        self.limit = limit
+        self.limit = limit or 5
         self.misp_event = MISPEvent()
         self.attribute = MISPAttribute()
         self.parsed_objects = {}
@@ -84,14 +31,11 @@ class VirusTotalParser(object):
         self.proxies = None
 
     @staticmethod
-    def get_total_analysis(analysis: dict, trusted_verdict: dict = None) -> int:
+    def get_total_analysis(analysis: dict, known_distributors: dict = None) -> int:
         if not analysis:
             return 0
-
         count = sum([analysis['undetected'], analysis['suspicious'], analysis['harmless']])
-        file_is_trusted = (trusted_verdict or {}).get('verdict') == 'goodware'
-
-        return count if file_is_trusted else count + analysis['malicious']
+        return count if known_distributors else count + analysis['malicious']
 
     def query_api(self, attribute: dict) -> None:
         self.attribute.from_dict(**attribute)
@@ -106,7 +50,7 @@ class VirusTotalParser(object):
         data = response['attributes']
         analysis = data['last_analysis_stats']
         malicious = analysis['malicious']
-        total = self.get_total_analysis(analysis, data.get('trusted_verdict'))
+        total = self.get_total_analysis(analysis, data.get('known_distributors'))
         permalink = f'https://www.virustotal.com/gui/{response["type"]}/{response["id"]}'
 
         vt_object = MISPObject('virustotal-report')
@@ -152,30 +96,29 @@ class VirusTotalParser(object):
     ################################################################################
 
     def parse_domain(self, domain: str) -> str:
-        response = self.client.get_domain_report(domain)
-        data = response['attributes']
+        domain = self.client.get_object(domain)
 
         # DOMAIN
-        domain_object = self.create_domain_object(response)
+        domain_object = self.create_domain_object(domain)
 
         # WHOIS
-        if data.get('whois'):
+        if domain.whois:
             whois_object = MISPObject('whois')
-            whois_object.add_attribute('text', type='text', value=data['whois'])
+            whois_object.add_attribute('text', type='text', value=domain.whois)
             self.misp_event.add_object(**whois_object)
 
         # SIBLINGS
-        siblings = self.client.get_domain_relationship(domain, 'siblings')
-        for sibling in siblings:
+        siblings_iterator = self.client.iterator(f'/domains/{domain.id}/siblings', limit=self.limit)
+        for sibling in siblings_iterator:
             attr = MISPAttribute()
-            attr.from_dict(**dict(type='domain', value=sibling['id']))
+            attr.from_dict(**dict(type='domain', value=sibling.id))
             self.misp_event.add_attribute(**attr)
             domain_object.add_reference(attr.uuid, 'sibling-of')
 
         # RESOLUTIONS
-        resolutions = self.client.get_domain_relationship(domain, 'resolutions')
-        for resolution in resolutions:
-            domain_object.add_attribute('ip', type='ip-dst', value=resolution['attributes']['ip_address'])
+        resolutions_iterator = self.client.iterator(f'/domains/{domain.id}/resolutions', limit=self.limit)
+        for resolution in resolutions_iterator:
+            domain_object.add_attribute('ip', type='ip-dst', value=resolution.id)
 
         # COMMUNICATING, DOWNLOADED AND REFERRER FILES
         for relationship_name, misp_name in [
@@ -183,15 +126,15 @@ class VirusTotalParser(object):
             ('downloaded_files', 'downloaded-from'),
             ('referrer_files', 'referring')
         ]:
-            files = self.client.get_domain_relationship(domain, relationship_name)
-            for f in files:
-                file_object = self.create_file_object(f)
+            files_iterator = self.client.iterator(f'/domains/{domain.id}/resolutions', limit=self.limit)
+            for file in files_iterator:
+                file_object = self.create_file_object(file)
                 file_object.add_reference(domain_object.uuid, misp_name)
                 self.misp_event.add_object(**file_object)
 
         # URLS
-        urls = self.client.get_domain_relationship(domain, 'urls')
-        for url in urls:
+        urls_iterator = self.client.iterator(f'/domains/{domain.id}/urls', limit=self.limit)
+        for url in urls_iterator:
             url_object = self.create_url_object(url)
             url_object.add_reference(domain_object.uuid, 'hosted-in')
             self.misp_event.add_object(**url_object)
@@ -200,33 +143,32 @@ class VirusTotalParser(object):
         return domain_object.uuid
 
     def parse_hash(self, file_hash: str) -> str:
-        response = self.client.get_file_report(file_hash)
-        file_object = self.create_file_object(response)
+        file_report = self.client.get_object(file_hash)
+        file_object = self.create_file_object(file_report)
         self.misp_event.add_object(**file_object)
         return file_object.uuid
 
     def parse_ip(self, ip: str) -> str:
-        response = self.client.get_ip_report(ip)
-        data = response['attributes']
+        ip_report = self.client.get_object(ip)
 
         # IP
-        ip_object = self.create_ip_object(response)
+        ip_object = self.create_ip_object(ip_report)
 
         # ASN
         asn_object = MISPObject('asn')
-        asn_object.add_attribute('asn', type='AS', value=data['asn'])
-        asn_object.add_attribute('subnet-announced', type='ip-src', value=data['network'])
-        asn_object.add_attribute('country', type='text', value=data['country'])
+        asn_object.add_attribute('asn', type='AS', value=ip_report.asn)
+        asn_object.add_attribute('subnet-announced', type='ip-src', value=ip_report.network)
+        asn_object.add_attribute('country', type='text', value=ip_report.country)
         self.misp_event.add_object(**asn_object)
 
         # RESOLUTIONS
-        resolutions = self.client.get_ip_relationship(ip, 'resolutions')
-        for resolution in resolutions:
+        resolutions_iterator = self.client.iterator(f'/ip_addresses/{ip_report.id}/resolutions', limit=self.limit)
+        for resolution in resolutions_iterator:
             ip_object.add_attribute('domain', type='domain', value=resolution['attributes']['host_name'])
 
         # URLS
-        urls = self.client.get_ip_relationship(ip, 'urls')
-        for url in urls:
+        urls_iterator = self.client.iterator(f'/ip_addresses/{ip_report.id}/urls', limit=self.limit)
+        for url in urls_iterator:
             url_object = self.create_url_object(url)
             url_object.add_reference(ip_object.uuid, 'hosted-in')
             self.misp_event.add_object(**url_object)
@@ -235,8 +177,8 @@ class VirusTotalParser(object):
         return ip_object.uuid
 
     def parse_url(self, url: str) -> str:
-        response = self.client.get_url_report(url)
-        url_object = self.create_url_object(response)
+        url_report = self.client.get_object(url)
+        url_object = self.create_url_object(url_report)
         self.misp_event.add_object(**url_object)
         return url_object.uuid
 
@@ -303,13 +245,15 @@ def handler(q=False):
     attribute = request['attribute']
 
     try:
-        client = VTClient(request['config']['apikey'],
-                          'https://www.virustotal.com/api/v3',
-                          proxies=get_proxy_settings(request.get('config')))
+        client = vt.Client(request['config']['apikey'],
+                           headers={
+                                'x-tool': 'MISPModuleVirusTotalExpansion',
+                           },
+                           proxy=get_proxy_settings(request.get('config'))['http'])
         parser = VirusTotalParser(client, event_limit)
         parser.query_api(attribute)
-    except VTApiError as ex:
-        misperrors['error'] = str(ex)
+    except vt.APIError as ex:
+        misperrors['error'] = ex.message
         return misperrors
 
     return parser.get_result()
