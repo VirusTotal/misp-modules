@@ -99,21 +99,14 @@ class VirusTotalParser:
             whois_object.add_attribute('text', type='text', value=domain_report.whois)
             self.misp_event.add_object(**whois_object)
 
-        # SIBLINGS
-        siblings_iterator = self.client.iterator(f'/domains/{domain_report.id}/siblings', limit=self.limit)
-        for sibling in siblings_iterator:
-            attr = MISPAttribute()
-            attr.from_dict(**dict(type='domain', value=sibling.id))
-            self.misp_event.add_attribute(**attr)
-            domain_object.add_reference(attr.uuid, 'sibling-of')
-
-        # SUBDOMAINS
-        subdomains_iterator = self.client.iterator(f'/domains/{domain_report.id}/subdomains', limit=self.limit)
-        for subdomain in subdomains_iterator:
-            attr = MISPAttribute()
-            attr.from_dict(**dict(type='domain', value=subdomain.id))
-            self.misp_event.add_attribute(**attr)
-            domain_object.add_reference(attr.uuid, 'subdomain')
+        # SIBLINGS AND SUBDOMAINS
+        for relationship_name, misp_name in [('siblings', 'sibling-of'), ('subdomains', 'subdomain')]:
+            rel_iterator = self.client.iterator(f'/domains/{domain_report.id}/{relationship_name}', limit=self.limit)
+            for item in rel_iterator:
+                attr = MISPAttribute()
+                attr.from_dict(**dict(type='domain', value=item.id))
+                self.misp_event.add_attribute(**attr)
+                domain_object.add_reference(attr.uuid, misp_name)
 
         # RESOLUTIONS
         resolutions_iterator = self.client.iterator(f'/domains/{domain_report.id}/resolutions', limit=self.limit)
@@ -234,7 +227,7 @@ def handler(q=False):
     try:
         client = vt.Client(request['config']['apikey'],
                            headers={
-                               'x-tool': 'MISPModuleVirusTotalExpansion',
+                               'x-tool': 'MISPModuleVirusTotalPublicExpansion',
                            },
                            proxy=proxy_settings['http'] if proxy_settings else None)
         parser = VirusTotalParser(client, int(event_limit) if event_limit else None)

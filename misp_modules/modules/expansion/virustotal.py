@@ -98,7 +98,7 @@ class VirusTotalParser:
             whois_object.add_attribute('text', type='text', value=domain_report.whois)
             self.misp_event.add_object(**whois_object)
 
-        # SIBLINGS
+        # SIBLINGS AND SUBDOMAINS
         for relationship_name, misp_name in [('siblings', 'sibling-of'), ('subdomains', 'subdomain')]:
             rel_iterator = self.client.iterator(f'/domains/{domain_report.id}/{relationship_name}', limit=self.limit)
             for item in rel_iterator:
