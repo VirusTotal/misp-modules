@@ -106,7 +106,7 @@ class VirusTotalParser(object):
         # RESOLUTIONS
         resolutions_iterator = self.client.iterator(f'/domains/{domain_report.id}/resolutions', limit=self.limit)
         for resolution in resolutions_iterator:
-            domain_object.add_attribute('ip', type='ip-dst', value=resolution.id)
+            domain_object.add_attribute('ip', type='ip-dst', value=resolution.ip_address)
 
         # COMMUNICATING, DOWNLOADED AND REFERRER FILES
         for relationship_name, misp_name in [
