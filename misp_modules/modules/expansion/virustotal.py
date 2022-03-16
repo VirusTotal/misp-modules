@@ -9,7 +9,7 @@ mispattributes = {'input': ['hostname', 'domain', "ip-src", "ip-dst", "md5", "sh
                   'format': 'misp_standard'}
 
 # possible module-types: 'expansion', 'hover' or both
-moduleinfo = {'version': '4', 'author': 'Hannah Ward',
+moduleinfo = {'version': '5', 'author': 'Hannah Ward',
               'description': 'Enrich observables with the VirusTotal v3 API',
               'module-type': ['expansion']}
 
@@ -17,7 +17,7 @@ moduleinfo = {'version': '4', 'author': 'Hannah Ward',
 moduleconfig = ["apikey", "event_limit", 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password']
 
 
-class VirusTotalParser(object):
+class VirusTotalParser:
     def __init__(self, client: vt.Client, limit: int) -> None:
         self.client = client
         self.limit = limit or 5
@@ -102,6 +102,14 @@ class VirusTotalParser(object):
             attr.from_dict(**dict(type='domain', value=sibling.id))
             self.misp_event.add_attribute(**attr)
             domain_object.add_reference(attr.uuid, 'sibling-of')
+
+        # SUBDOMAINS
+        subdomains_iterator = self.client.iterator(f'/domains/{domain_report.id}/subdomains', limit=self.limit)
+        for subdomain in subdomains_iterator:
+            attr = MISPAttribute()
+            attr.from_dict(**dict(type='domain', value=subdomain.id))
+            self.misp_event.add_attribute(**attr)
+            domain_object.add_reference(attr.uuid, 'subdomain')
 
         # RESOLUTIONS
         resolutions_iterator = self.client.iterator(f'/domains/{domain_report.id}/resolutions', limit=self.limit)
