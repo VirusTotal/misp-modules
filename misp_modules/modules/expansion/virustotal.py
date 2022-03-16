@@ -143,13 +143,13 @@ class VirusTotalParser(object):
         return domain_object.uuid
 
     def parse_hash(self, file_hash: str) -> str:
-        file_report = self.client.get_object(file_hash)
+        file_report = self.client.get_object(f'files/{file_hash}')
         file_object = self.create_file_object(file_report)
         self.misp_event.add_object(**file_object)
         return file_object.uuid
 
     def parse_ip(self, ip: str) -> str:
-        ip_report = self.client.get_object(ip)
+        ip_report = self.client.get_object(f'/ip_addresses/{ip}')
 
         # IP
         ip_object = self.create_ip_object(ip_report)
@@ -177,7 +177,7 @@ class VirusTotalParser(object):
         return ip_object.uuid
 
     def parse_url(self, url: str) -> str:
-        url_report = self.client.get_object(url)
+        url_report = self.client.get_object(f'/urls/{url}')
         url_object = self.create_url_object(url_report)
         self.misp_event.add_object(**url_object)
         return url_object.uuid
