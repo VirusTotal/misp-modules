@@ -96,48 +96,48 @@ class VirusTotalParser(object):
     ################################################################################
 
     def parse_domain(self, domain: str) -> str:
-        domain = self.client.get_object(domain)
+        domain_report = self.client.get_object(f'/domains/{domain}')
 
         # DOMAIN
-        domain_object = self.create_domain_object(domain)
+        domain_object = self.create_domain_object(domain_report)
 
-        # # WHOIS
-        # if domain.whois:
-        #     whois_object = MISPObject('whois')
-        #     whois_object.add_attribute('text', type='text', value=domain.whois)
-        #     self.misp_event.add_object(**whois_object)
-        #
-        # # SIBLINGS
-        # siblings_iterator = self.client.iterator(f'/domains/{domain.id}/siblings', limit=self.limit)
-        # for sibling in siblings_iterator:
-        #     attr = MISPAttribute()
-        #     attr.from_dict(**dict(type='domain', value=sibling.id))
-        #     self.misp_event.add_attribute(**attr)
-        #     domain_object.add_reference(attr.uuid, 'sibling-of')
-        #
-        # # RESOLUTIONS
-        # resolutions_iterator = self.client.iterator(f'/domains/{domain.id}/resolutions', limit=self.limit)
-        # for resolution in resolutions_iterator:
-        #     domain_object.add_attribute('ip', type='ip-dst', value=resolution.id)
-        #
-        # # COMMUNICATING, DOWNLOADED AND REFERRER FILES
-        # for relationship_name, misp_name in [
-        #     ('communicating_files', 'communicates-with'),
-        #     ('downloaded_files', 'downloaded-from'),
-        #     ('referrer_files', 'referring')
-        # ]:
-        #     files_iterator = self.client.iterator(f'/domains/{domain.id}/resolutions', limit=self.limit)
-        #     for file in files_iterator:
-        #         file_object = self.create_file_object(file)
-        #         file_object.add_reference(domain_object.uuid, misp_name)
-        #         self.misp_event.add_object(**file_object)
-        #
-        # # URLS
-        # urls_iterator = self.client.iterator(f'/domains/{domain.id}/urls', limit=self.limit)
-        # for url in urls_iterator:
-        #     url_object = self.create_url_object(url)
-        #     url_object.add_reference(domain_object.uuid, 'hosted-in')
-        #     self.misp_event.add_object(**url_object)
+        # WHOIS
+        if domain_report.whois:
+            whois_object = MISPObject('whois')
+            whois_object.add_attribute('text', type='text', value=domain_report.whois)
+            self.misp_event.add_object(**whois_object)
+
+        # SIBLINGS
+        siblings_iterator = self.client.iterator(f'/domains/{domain_report.id}/siblings', limit=self.limit)
+        for sibling in siblings_iterator:
+            attr = MISPAttribute()
+            attr.from_dict(**dict(type='domain', value=sibling.id))
+            self.misp_event.add_attribute(**attr)
+            domain_object.add_reference(attr.uuid, 'sibling-of')
+
+        # RESOLUTIONS
+        resolutions_iterator = self.client.iterator(f'/domains/{domain_report.id}/resolutions', limit=self.limit)
+        for resolution in resolutions_iterator:
+            domain_object.add_attribute('ip', type='ip-dst', value=resolution.id)
+
+        # COMMUNICATING, DOWNLOADED AND REFERRER FILES
+        for relationship_name, misp_name in [
+            ('communicating_files', 'communicates-with'),
+            ('downloaded_files', 'downloaded-from'),
+            ('referrer_files', 'referring')
+        ]:
+            files_iterator = self.client.iterator(f'/domains/{domain_report.id}/resolutions', limit=self.limit)
+            for file in files_iterator:
+                file_object = self.create_file_object(file)
+                file_object.add_reference(domain_object.uuid, misp_name)
+                self.misp_event.add_object(**file_object)
+
+        # URLS
+        urls_iterator = self.client.iterator(f'/domains/{domain_report.id}/urls', limit=self.limit)
+        for url in urls_iterator:
+            url_object = self.create_url_object(url)
+            url_object.add_reference(domain_object.uuid, 'hosted-in')
+            self.misp_event.add_object(**url_object)
 
         self.misp_event.add_object(**domain_object)
         return domain_object.uuid
