@@ -177,7 +177,8 @@ class VirusTotalParser(object):
         return ip_object.uuid
 
     def parse_url(self, url: str) -> str:
-        url_report = self.client.get_object(f'/urls/{url}')
+        url_id = vt.url_id(url)
+        url_report = self.client.get_object(f'/urls/{url_id}')
         url_object = self.create_url_object(url_report)
         self.misp_event.add_object(**url_object)
         return url_object.uuid
