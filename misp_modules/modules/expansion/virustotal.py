@@ -17,10 +17,13 @@ moduleinfo = {'version': '5', 'author': 'Hannah Ward',
 moduleconfig = ["apikey", "event_limit", 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password']
 
 
+DEFAULT_RESULTS_LIMIT = 10
+
+
 class VirusTotalParser:
     def __init__(self, client: vt.Client, limit: int) -> None:
         self.client = client
-        self.limit = limit or 5
+        self.limit = limit or DEFAULT_RESULTS_LIMIT
         self.misp_event = MISPEvent()
         self.attribute = MISPAttribute()
         self.parsed_objects = {}

@@ -18,10 +18,13 @@ LOGGER = logging.getLogger('virus_total_public')
 LOGGER.setLevel(logging.INFO)
 
 
+DEFAULT_RESULTS_LIMIT = 10
+
+
 class VirusTotalParser:
     def __init__(self, client: vt.Client, limit: int) -> None:
         self.client = client
-        self.limit = limit or 5
+        self.limit = limit or DEFAULT_RESULTS_LIMIT
         self.misp_event = MISPEvent()
         self.attribute = MISPAttribute()
         self.parsed_objects = {}
