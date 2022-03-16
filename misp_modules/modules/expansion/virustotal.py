@@ -248,7 +248,7 @@ def handler(q=False):
                                 'x-tool': 'MISPModuleVirusTotalExpansion',
                            },
                            proxy=proxy_settings['http'] if proxy_settings else None)
-        parser = VirusTotalParser(client, event_limit)
+        parser = VirusTotalParser(client, int(event_limit) if event_limit else None)
         parser.query_api(attribute)
     except vt.APIError as ex:
         misperrors['error'] = ex.message
