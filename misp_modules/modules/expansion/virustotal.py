@@ -47,13 +47,13 @@ class VirusTotalParser(object):
         return {'results': results}
 
     def add_vt_report(self, report: vt.Object) -> str:
-        malicious = report.get('last_analysis_stats')['malicious']
-        total = self.get_total_analysis(report.get('last_analysis_stats'), report.get('known_distributors'))
+        analysis = report.get('last_analysis_stats')
+        total = self.get_total_analysis(analysis, report.get('known_distributors'))
         permalink = f'https://www.virustotal.com/gui/{report.type}/{report.id}'
 
         vt_object = MISPObject('virustotal-report')
         vt_object.add_attribute('permalink', type='link', value=permalink)
-        detection_ratio = f'{malicious}/{total}'
+        detection_ratio = f"{analysis['malicious']}/{total}" if analysis else '-/-'
         vt_object.add_attribute('detection-ratio', type='text', value=detection_ratio, disable_correlation=True)
         self.misp_event.add_object(**vt_object)
         return vt_object.uuid
