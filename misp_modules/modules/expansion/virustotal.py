@@ -58,36 +58,26 @@ class VirusTotalParser(object):
         self.misp_event.add_object(**vt_object)
         return vt_object.uuid
 
-    def create_file_object(self, report: vt.Object) -> MISPObject:
+    def create_misp_object(self, report: vt.Object) -> MISPObject:
+        misp_object = None
         vt_uuid = self.add_vt_report(report)
-        file_object = MISPObject('file')
-        for hash_type in ('md5', 'sha1', 'sha256'):
-            file_object.add_attribute(**{'type': hash_type,
-                                         'object_relation': hash_type,
-                                         'value': report.get(hash_type)})
-        file_object.add_reference(vt_uuid, 'analyzed-with')
-        return file_object
-
-    def create_domain_object(self, report: vt.Object) -> MISPObject:
-        vt_uuid = self.add_vt_report(report)
-        domain_object = MISPObject('domain-ip')
-        domain_object.add_attribute('domain', type='domain', value=report.id)
-        domain_object.add_reference(vt_uuid, 'analyzed-with')
-        return domain_object
-
-    def create_ip_object(self, report: vt.Object) -> MISPObject:
-        vt_uuid = self.add_vt_report(report)
-        ip_object = MISPObject('domain-ip')
-        ip_object.add_attribute('ip', type='ip-dst', value=report.id)
-        ip_object.add_reference(vt_uuid, 'analyzed-with')
-        return ip_object
-
-    def create_url_object(self, report: vt.Object) -> MISPObject:
-        vt_uuid = self.add_vt_report(report)
-        url_object = MISPObject('url')
-        url_object.add_attribute('url', type='url', value=report.url)
-        url_object.add_reference(vt_uuid, 'analyzed-with')
-        return url_object
+        if report.type == 'file':
+            misp_object = MISPObject('file')
+            for hash_type in ('md5', 'sha1', 'sha256'):
+                misp_object.add_attribute(**{'type': hash_type,
+                                             'object_relation': hash_type,
+                                             'value': report.get(hash_type)})
+        elif report.type == 'domain':
+            misp_object = MISPObject('domain-ip')
+            misp_object.add_attribute('domain', type='domain', value=report.id)
+        elif report.type == 'ip_address':
+            misp_object = MISPObject('domain-ip')
+            misp_object.add_attribute('ip', type='ip-dst', value=report.id)
+        elif report.type == 'url':
+            misp_object = MISPObject('url')
+            misp_object.add_attribute('url', type='url', value=report.url)
+        misp_object.add_reference(vt_uuid, 'analyzed-with')
+        return misp_object
 
     ################################################################################
     ####                         Main parsing functions                         #### # noqa
@@ -97,7 +87,7 @@ class VirusTotalParser(object):
         domain_report = self.client.get_object(f'/domains/{domain}')
 
         # DOMAIN
-        domain_object = self.create_domain_object(domain_report)
+        domain_object = self.create_misp_object(domain_report)
 
         # WHOIS
         if domain_report.whois:
@@ -124,16 +114,16 @@ class VirusTotalParser(object):
             ('downloaded_files', 'downloaded-from'),
             ('referrer_files', 'referring')
         ]:
-            files_iterator = self.client.iterator(f'/domains/{domain_report.id}/resolutions', limit=self.limit)
+            files_iterator = self.client.iterator(f'/domains/{domain_report.id}/{relationship_name}', limit=self.limit)
             for file in files_iterator:
-                file_object = self.create_file_object(file)
+                file_object = self.create_misp_object(file)
                 file_object.add_reference(domain_object.uuid, misp_name)
                 self.misp_event.add_object(**file_object)
 
         # URLS
         urls_iterator = self.client.iterator(f'/domains/{domain_report.id}/urls', limit=self.limit)
         for url in urls_iterator:
-            url_object = self.create_url_object(url)
+            url_object = self.create_misp_object(url)
             url_object.add_reference(domain_object.uuid, 'hosted-in')
             self.misp_event.add_object(**url_object)
 
@@ -142,7 +132,7 @@ class VirusTotalParser(object):
 
     def parse_hash(self, file_hash: str) -> str:
         file_report = self.client.get_object(f'files/{file_hash}')
-        file_object = self.create_file_object(file_report)
+        file_object = self.create_misp_object(file_report)
         self.misp_event.add_object(**file_object)
         return file_object.uuid
 
@@ -150,7 +140,7 @@ class VirusTotalParser(object):
         ip_report = self.client.get_object(f'/ip_addresses/{ip}')
 
         # IP
-        ip_object = self.create_ip_object(ip_report)
+        ip_object = self.create_misp_object(ip_report)
 
         # ASN
         asn_object = MISPObject('asn')
@@ -167,7 +157,7 @@ class VirusTotalParser(object):
         # URLS
         urls_iterator = self.client.iterator(f'/ip_addresses/{ip_report.id}/urls', limit=self.limit)
         for url in urls_iterator:
-            url_object = self.create_url_object(url)
+            url_object = self.create_misp_object(url)
             url_object.add_reference(ip_object.uuid, 'hosted-in')
             self.misp_event.add_object(**url_object)
 
@@ -177,7 +167,7 @@ class VirusTotalParser(object):
     def parse_url(self, url: str) -> str:
         url_id = vt.url_id(url)
         url_report = self.client.get_object(f'/urls/{url_id}')
-        url_object = self.create_url_object(url_report)
+        url_object = self.create_misp_object(url_report)
         self.misp_event.add_object(**url_object)
         return url_object.uuid
 
