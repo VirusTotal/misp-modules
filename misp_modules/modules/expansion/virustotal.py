@@ -92,6 +92,10 @@ class VirusTotalParser:
         # DOMAIN
         domain_object = self.create_misp_object(domain_report)
 
+        test_object = MISPObject('custom-object-name1')
+        test_object.add_attribute('text', type='text', value='TEST TEXT')
+        self.misp_event.add_object(**test_object)
+
         # WHOIS
         if domain_report.whois:
             whois_object = MISPObject('whois')
