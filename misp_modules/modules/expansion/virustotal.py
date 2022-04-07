@@ -43,7 +43,7 @@ class VirusTotalParser:
     def query_api(self, attribute: dict) -> None:
         self.attribute.from_dict(**attribute)
         f = open("/tmp/vtlog.txt", "w")
-        f.write(self.attribute.value)
+        f.write(self.attribute.type)
         f.close()
         self.input_types_mapping[self.attribute.type](self.attribute.value)
 
