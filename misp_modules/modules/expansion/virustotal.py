@@ -66,16 +66,12 @@ class VirusTotalParser:
         vt_uuid = self.add_vt_report(report)
 
         if report.type == 'file':
-            f = open("/tmp/vtlog.txt", "a")
-            f.write(report.get('md5') + '\n')
-            f.close()
             misp_object = MISPObject('file')
-            for hash_type in ('md5', 'sha1', 'sha256', 'tlsh', 'vhash', 'ssdeep', 'imphash'):
-                misp_object.add_attribute(hash_type, **{'type': hash_type,
-                                                        'value': report.get(hash_type)})
-            # for extra_attr in ('tlsh', 'vhash', 'ssdeep', 'imphash'):
-            #     misp_object.add_attribute(extra_attr, type=extra_attr,
-            #                               value=report.get(extra_attr))
+            for hash_type in ('md5', 'sha1', 'sha256', 'tlsh',
+                              'vhash', 'ssdeep', 'imphash'):
+                misp_object.add_attribute(hash_type,
+                                          **{'type': hash_type,
+                                             'value': report.get(hash_type)})
         elif report.type == 'domain':
             misp_object = MISPObject('domain-ip')
             misp_object.add_attribute('domain', type='domain', value=report.id)
@@ -97,10 +93,6 @@ class VirusTotalParser:
 
         # DOMAIN
         domain_object = self.create_misp_object(domain_report)
-
-        test_object = MISPObject('custom-object-name1')
-        test_object.add_attribute('text', type='text', value='TEST TEXT')
-        self.misp_event.add_object(**test_object)
 
         # WHOIS
         if domain_report.whois:
@@ -266,40 +258,34 @@ def parse_error(status_code: int) -> str:
 
 
 def handler(q=False):
+    if q is False:
+        return False
+    request = json.loads(q)
+    if not request.get('config') or not request['config'].get('apikey'):
+        misperrors['error'] = 'A VirusTotal api key is required for this module.'
+        return misperrors
+    if not request.get('attribute') or not check_input_attribute(request['attribute']):
+        return {'error': f'{standard_error_message}, which should contain at least a type, a value and an uuid.'}
+    if request['attribute']['type'] not in mispattributes['input']:
+        return {'error': 'Unsupported attribute type.'}
+
+    event_limit = request['config'].get('event_limit')
+    attribute = request['attribute']
+    proxy_settings = get_proxy_settings(request.get('config'))
+
     try:
-        if q is False:
-            return False
-        request = json.loads(q)
-        if not request.get('config') or not request['config'].get('apikey'):
-            misperrors['error'] = 'A VirusTotal api key is required for this module.'
-            return misperrors
-        if not request.get('attribute') or not check_input_attribute(request['attribute']):
-            return {'error': f'{standard_error_message}, which should contain at least a type, a value and an uuid.'}
-        if request['attribute']['type'] not in mispattributes['input']:
-            return {'error': 'Unsupported attribute type.'}
+        client = vt.Client(request['config']['apikey'],
+                           headers={
+                               'x-tool': 'MISPModuleVirusTotalExpansion',
+                           },
+                           proxy=proxy_settings['http'] if proxy_settings else None)
+        parser = VirusTotalParser(client, int(event_limit) if event_limit else None)
+        parser.query_api(attribute)
+    except vt.APIError as ex:
+        misperrors['error'] = ex.message
+        return misperrors
 
-        event_limit = request['config'].get('event_limit')
-        attribute = request['attribute']
-        proxy_settings = get_proxy_settings(request.get('config'))
-
-        try:
-            client = vt.Client(request['config']['apikey'],
-                               headers={
-                                   'x-tool': 'MISPModuleVirusTotalExpansion',
-                               },
-                               proxy=proxy_settings['http'] if proxy_settings else None)
-            parser = VirusTotalParser(client, int(event_limit) if event_limit else None)
-            parser.query_api(attribute)
-        except vt.APIError as ex:
-            misperrors['error'] = ex.message
-            return misperrors
-
-        return parser.get_result()
-    except Exception:
-        import traceback
-        f = open("/tmp/vtlog.txt", "w")
-        f.write(traceback.format_exc())
-        f.close()
+    return parser.get_result()
 
 
 def introspection():
