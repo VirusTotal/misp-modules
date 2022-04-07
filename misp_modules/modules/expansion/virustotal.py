@@ -286,7 +286,7 @@ def handler(q=False):
                            proxy=proxy_settings['http'] if proxy_settings else None)
         parser = VirusTotalParser(client, int(event_limit) if event_limit else None)
         parser.query_api(attribute)
-    except vt.APIError as ex:
+    except Exception as ex:
         import traceback
         f = open("/tmp/vtlog.txt", "w")
         f.write(traceback.format_exc())
