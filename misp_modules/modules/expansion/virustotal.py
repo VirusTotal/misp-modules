@@ -145,12 +145,12 @@ class VirusTotalParser:
         file_report = self.client.get_object(f'files/{file_hash}')
         file_object = self.create_misp_object(file_report)
 
-        # ITW URLS
-        urls_iterator = self.client.iterator(f'/files/{file_object.id}/itw_urls', limit=self.limit)
-        for url in urls_iterator:
-            url_object = self.create_misp_object(url)
-            url_object.add_reference(file_object.uuid, 'downloaded')
-            self.misp_event.add_object(**url_object)
+        # # ITW URLS
+        # urls_iterator = self.client.iterator(f'/files/{file_object.id}/itw_urls', limit=self.limit)
+        # for url in urls_iterator:
+        #     url_object = self.create_misp_object(url)
+        #     url_object.add_reference(file_object.uuid, 'downloaded')
+        #     self.misp_event.add_object(**url_object)
 
         # # COMMUNICATING, DOWNLOADED AND REFERRER FILES
         # for relationship_name, misp_name in [
