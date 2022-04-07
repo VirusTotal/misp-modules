@@ -143,9 +143,9 @@ class VirusTotalParser:
 
     def parse_hash(self, file_hash: str) -> str:
         f = open("/tmp/vtlog.txt", "w")
-        f.write('parse_hash\n')
+        f.write(f'{file_hash}\n')
         f.close()
-        file_report = self.client.get_object(f'files/{file_hash}')
+        file_report = self.client.get_object(f'/files/{file_hash}')
         f = open("/tmp/vtlog.txt", "w")
         f.write(str(file_report))
         f.close()

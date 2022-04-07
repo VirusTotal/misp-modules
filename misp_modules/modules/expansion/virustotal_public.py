@@ -128,7 +128,7 @@ class VirusTotalParser:
         return domain_object.uuid
 
     def parse_hash(self, file_hash: str) -> str:
-        file_report = self.client.get_object(f'files/{file_hash}')
+        file_report = self.client.get_object(f'/files/{file_hash}')
         file_object = self.create_misp_object(file_report)
         self.misp_event.add_object(**file_object)
         return file_object.uuid
