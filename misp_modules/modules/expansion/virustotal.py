@@ -42,9 +42,6 @@ class VirusTotalParser:
 
     def query_api(self, attribute: dict) -> None:
         self.attribute.from_dict(**attribute)
-        f = open("/tmp/vtlog.txt", "w")
-        f.write(self.attribute.type)
-        f.close()
         self.input_types_mapping[self.attribute.type](self.attribute.value)
 
     def get_result(self) -> dict:
@@ -67,7 +64,9 @@ class VirusTotalParser:
     def create_misp_object(self, report: vt.Object) -> MISPObject:
         misp_object = None
         vt_uuid = self.add_vt_report(report)
-
+        f = open("/tmp/vtlog.txt", "a")
+        f.write(report.type + '\n')
+        f.close()
         if report.type == 'file':
             misp_object = MISPObject('file')
             for hash_type in ('md5', 'sha1', 'sha256'):
@@ -147,6 +146,9 @@ class VirusTotalParser:
 
     def parse_hash(self, file_hash: str) -> str:
         file_report = self.client.get_object(f'/files/{file_hash}')
+        f = open("/tmp/vtlog.txt", "a")
+        f.write(file_report.type + '\n')
+        f.close()
         file_object = self.create_misp_object(file_report)
 
         # ITW URLS
