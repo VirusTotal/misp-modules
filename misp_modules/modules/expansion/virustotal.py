@@ -152,17 +152,17 @@ class VirusTotalParser:
             url_object.add_reference(file_object.uuid, 'downloaded')
             self.misp_event.add_object(**url_object)
 
-        # COMMUNICATING, DOWNLOADED AND REFERRER FILES
-        for relationship_name, misp_name in [
-            ('contacted_urls', 'communicates-with'),
-            ('contacted_domains', 'communicates-with'),
-            ('contacted_ips', 'communicates-with')
-        ]:
-            files_iterator = self.client.iterator(f'/files/{file_object.id}/{relationship_name}', limit=self.limit)
-            for file in files_iterator:
-                file_object = self.create_misp_object(file)
-                file_object.add_reference(file_object.uuid, misp_name)
-                self.misp_event.add_object(**file_object)
+        # # COMMUNICATING, DOWNLOADED AND REFERRER FILES
+        # for relationship_name, misp_name in [
+        #     ('contacted_urls', 'communicates-with'),
+        #     ('contacted_domains', 'communicates-with'),
+        #     ('contacted_ips', 'communicates-with')
+        # ]:
+        #     files_iterator = self.client.iterator(f'/files/{file_object.id}/{relationship_name}', limit=self.limit)
+        #     for file in files_iterator:
+        #         file_object = self.create_misp_object(file)
+        #         file_object.add_reference(file_object.uuid, misp_name)
+        #         self.misp_event.add_object(**file_object)
 
         self.misp_event.add_object(**file_object)
         return file_object.uuid
