@@ -70,9 +70,9 @@ class VirusTotalParser:
                 misp_object.add_attribute(**{'type': hash_type,
                                              'object_relation': hash_type,
                                              'value': report.get(hash_type)})
-            for extra_attr in ('tlsh', 'vhash', 'ssdeep', 'imphash'):
-                misp_object.add_attribute(**{'type': extra_attr,
-                                             'value': report.get(extra_attr)})
+            # for extra_attr in ('tlsh', 'vhash', 'ssdeep', 'imphash'):
+            #     misp_object.add_attribute(**{'type': extra_attr,
+            #                                  'value': report.get(extra_attr)})
         elif report.type == 'domain':
             misp_object = MISPObject('domain-ip')
             misp_object.add_attribute('domain', type='domain', value=report.id)
