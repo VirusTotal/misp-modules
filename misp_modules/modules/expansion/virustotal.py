@@ -70,10 +70,9 @@ class VirusTotalParser:
             f.write(report.get('md5') + '\n')
             f.close()
             misp_object = MISPObject('file')
-            for hash_type in ('md5', 'sha1', 'sha256'):
-                misp_object.add_attribute(**{'type': hash_type,
-                                             'object_relation': hash_type,
-                                             'value': report.get(hash_type)})
+            for hash_type in ('md5', 'sha1', 'sha256', 'tlsh', 'vhash', 'ssdeep', 'imphash'):
+                misp_object.add_attribute(hash_type, **{'type': hash_type,
+                                                        'value': report.get(hash_type)})
             # for extra_attr in ('tlsh', 'vhash', 'ssdeep', 'imphash'):
             #     misp_object.add_attribute(extra_attr, type=extra_attr,
             #                               value=report.get(extra_attr))
@@ -147,9 +146,6 @@ class VirusTotalParser:
 
     def parse_hash(self, file_hash: str) -> str:
         file_report = self.client.get_object(f'/files/{file_hash}')
-        f = open("/tmp/vtlog.txt", "a")
-        f.write(file_report.type + '\n')
-        f.close()
         file_object = self.create_misp_object(file_report)
 
         # ITW URLS
