@@ -287,6 +287,10 @@ def handler(q=False):
         parser = VirusTotalParser(client, int(event_limit) if event_limit else None)
         parser.query_api(attribute)
     except vt.APIError as ex:
+        import traceback
+        f = open("/tmp/vtlog.txt", "w")
+        f.write(traceback.format_exc())
+        f.close()
         misperrors['error'] = ex.message
         return misperrors
 
