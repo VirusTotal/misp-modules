@@ -42,6 +42,9 @@ class VirusTotalParser:
 
     def query_api(self, attribute: dict) -> None:
         self.attribute.from_dict(**attribute)
+        f = open("/tmp/vtlog.txt", "w")
+        f.write(self.attribute.value)
+        f.close()
         self.input_types_mapping[self.attribute.type](self.attribute.value)
 
     def get_result(self) -> dict:
@@ -64,9 +67,7 @@ class VirusTotalParser:
     def create_misp_object(self, report: vt.Object) -> MISPObject:
         misp_object = None
         vt_uuid = self.add_vt_report(report)
-        f = open("/tmp/vtlog.txt", "w")
-        f.write(report.type)
-        f.close()
+
         if report.type == 'file':
             misp_object = MISPObject('file')
             for hash_type in ('md5', 'sha1', 'sha256'):
