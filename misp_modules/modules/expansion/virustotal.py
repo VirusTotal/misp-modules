@@ -146,7 +146,7 @@ class VirusTotalParser:
         file_object = self.create_misp_object(file_report)
 
         # ITW URLS
-        urls_iterator = self.client.iterator(f'/files/{file_object.id}/itw_urls', limit=self.limit)
+        urls_iterator = self.client.iterator(f'/files/{file_report.id}/itw_urls', limit=self.limit)
         for url in urls_iterator:
             url_object = self.create_misp_object(url)
             url_object.add_reference(file_object.uuid, 'downloaded')
@@ -158,7 +158,7 @@ class VirusTotalParser:
             ('contacted_domains', 'communicates-with'),
             ('contacted_ips', 'communicates-with')
         ]:
-            files_iterator = self.client.iterator(f'/files/{file_object.id}/{relationship_name}', limit=self.limit)
+            files_iterator = self.client.iterator(f'/files/{file_report.id}/{relationship_name}', limit=self.limit)
             for file in files_iterator:
                 file_object = self.create_misp_object(file)
                 file_object.add_reference(file_object.uuid, misp_name)
