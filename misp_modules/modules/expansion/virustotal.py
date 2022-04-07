@@ -64,18 +64,19 @@ class VirusTotalParser:
     def create_misp_object(self, report: vt.Object) -> MISPObject:
         misp_object = None
         vt_uuid = self.add_vt_report(report)
-        f = open("/tmp/vtlog.txt", "a")
-        f.write(report.type + '\n')
-        f.close()
+
         if report.type == 'file':
+            f = open("/tmp/vtlog.txt", "a")
+            f.write(report.get('md5') + '\n')
+            f.close()
             misp_object = MISPObject('file')
             for hash_type in ('md5', 'sha1', 'sha256'):
                 misp_object.add_attribute(**{'type': hash_type,
                                              'object_relation': hash_type,
                                              'value': report.get(hash_type)})
-            for extra_attr in ('tlsh', 'vhash', 'ssdeep', 'imphash'):
-                misp_object.add_attribute(extra_attr, type=extra_attr,
-                                          value=report.get(extra_attr))
+            # for extra_attr in ('tlsh', 'vhash', 'ssdeep', 'imphash'):
+            #     misp_object.add_attribute(extra_attr, type=extra_attr,
+            #                               value=report.get(extra_attr))
         elif report.type == 'domain':
             misp_object = MISPObject('domain-ip')
             misp_object.add_attribute('domain', type='domain', value=report.id)
