@@ -62,6 +62,9 @@ class VirusTotalParser:
         return vt_object.uuid
 
     def create_misp_object(self, report: vt.Object) -> MISPObject:
+        f = open("/tmp/vtlog.txt", "w")
+        f.write(str(report))
+        f.close()
         misp_object = None
         vt_uuid = self.add_vt_report(report)
 
@@ -289,7 +292,7 @@ def handler(q=False):
         return parser.get_result()
     except Exception:
         import traceback
-        f = open("/tmp/vtlog.txt", "w")
+        f = open("/tmp/vtlog.txt", "a")
         f.write(traceback.format_exc())
         f.close()
 
